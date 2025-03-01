@@ -1,0 +1,14 @@
+<!doctype html>
+<html>
+  <head>
+    <title>COllaborative Text Editor</title>
+    <!-- Load Socket.IO client library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/3.0.4/socket.io.min.js"></script>
+  </head>
+  <body>
+    <!-- A simple textarea to serve as the text editor -->
+    <textarea id="editor" rows="20" cols="80">{{ text }}</textarea>
+    <!-- Load your custom JavaScript -->
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+  </body>
+</html>
