@@ -29,5 +29,6 @@ def on_text_update(data):
 
 
 if __name__ == '__main__':
-    # Use eventlet to support WebSocket connections
-    socketio.run(app, debug=True)
+    import os
+    port = int(os.environ.get("PORT", 8000))
+    socketio.run(app, host='0.0.0.0', port=port)
