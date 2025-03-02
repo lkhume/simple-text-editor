@@ -1,20 +1,28 @@
-// Connect to the server
-var socket = io();
+// Connect to the WebSocket endpoint
+const socket = new WebSocket("ws://" + window.location.host + "/ws");
 
-// Get a reference to the textarea element
-var editor = document.getElementById("editor");
-var timeout = null;
+// Reference to the textarea
+const editor = document.getElementById("editor");
+let timeout = null;
 
-// Listen for changes in the textarea
-editor.addEventListener("input", function () {
+// On connection open.
+socket.onopen = () => {
+  console.log("WebSocket connection established.");
+};
+
+// Handle incoming messages.
+socket.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  if (data.text !== undefined) {
+    editor.value = data.text;
+  }
+};
+
+// Send updates to the server with a delay
+editor.addEventListener("input", () => {
   clearTimeout(timeout);
-  timeout = setTimeout(function () {
-    socket.emit("text_update", { text: editor.value }); // Delay of 300ms to batch updates
+  timeout = setTimeout(() => {
+    const msg = { text: editor.value };
+    socket.send(JSON.stringify(msg));
   }, 300);
-});
-
-// Listen for changes in the server
-socket.on("update_text", function (data) {
-  // Update the text area with the latest text from other clients
-  editor.value = data.text;
 });
