@@ -1,6 +1,7 @@
 package main
 
 import (
+	"embed"
 	"html/template"
 	"log"
 	"net/http"
@@ -17,8 +18,11 @@ var (
 	clientsMutex sync.Mutex
 )
 
+//go:embed templates/*
+var templatesFS embed.FS
+
 // Parse the index.html template.
-var tmpl = template.Must(template.ParseFiles("templates/index.html"))
+var tmpl = template.Must(template.ParseFS(templatesFS, "templates/index.html"))
 
 // Configure the WebSocket upgrader
 var upgrader = websocket.Upgrader{
