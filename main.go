@@ -5,6 +5,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"os"
 	"sync"
 
 	"github.com/gorilla/websocket"
@@ -107,6 +108,14 @@ func broadcastUpdate(sender *websocket.Conn, text string) {
 }
 
 func main() {
+	dir, err := os.Getwd()
+
+	if err != nil {
+		log.Fatal("Error fetching working directory: ", err)
+	}
+
+	log.Println("Roxane working directory: ", dir)
+
 	// Route for the main page.
 	http.HandleFunc("/", serveIndex)
 	// WebSocket endpoint.
