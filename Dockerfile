@@ -11,4 +11,10 @@ RUN go build -v -o /run-app .
 FROM debian:bookworm
 
 COPY --from=builder /run-app /usr/local/bin/
+
+# Copy the static and templates directories.
+COPY --from=builder /usr/src/app/static /app/static
+COPY --from=builder /usr/src/app/templates /app/templates
+
+# Run the binary
 CMD ["run-app"]
