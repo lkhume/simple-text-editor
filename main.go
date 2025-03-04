@@ -9,18 +9,19 @@ import (
 	"sync"
 
 	"github.com/gorilla/websocket"
-)
-
-// Global shared text and mutex for safe concurrent access.
-var (
-	sharedText   string = ""
-	textMutex    sync.RWMutex
-	clients      = make(map[*websocket.Conn]bool)
-	clientsMutex sync.Mutex
+	"github.com/lkhume/simple-text-editor/crdt"
 )
 
 //go:embed templates/*
 var templatesFS embed.FS
+
+type Operation struct {
+	Type    string `json:"type"` // "insert"/"delete"
+	Pos     int    `json:"pos"`
+	Char    string `json:"char,omitempty"`
+	Site    string `json:"site,omitempty"`
+	Counter int    `json:"counter,omitempty"`
+}
 
 // Parse the index.html template.
 var tmpl = template.Must(template.ParseFS(templatesFS, "templates/index.html"))
@@ -32,6 +33,17 @@ var upgrader = websocket.Upgrader{
 		return true
 	},
 }
+
+// global map tracking all active websocket connections
+var clients = make(map[*websocket.Conn]bool)
+
+// client map mutex
+var clientsMutex sync.Mutex
+
+// initialize CRDT document
+var doc = crdt.NewDocument()
+var localSite = "local"
+var localCounter = 0
 
 // serveIndex renders the index.html template.
 func serveIndex(w http.ResponseWriter, r *http.Request) {
@@ -56,49 +68,69 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	clientsMutex.Unlock()
 
 	// Send the current shared text to the new client.
-	textMutex.RLock()
-	if err := conn.WriteJSON(map[string]string{"text": sharedText}); err != nil {
-		log.Println("Error sending shared text:", err)
-		textMutex.RUnlock()
+	if err := conn.WriteJSON(map[string]string{"text": doc.ToString()}); err != nil {
+		log.Println("Error sending shared document:", err)
 		return
 	}
-	textMutex.RUnlock()
 
 	// Listen for incoming messages.
 	for {
-		var msg map[string]string
-		if err := conn.ReadJSON(&msg); err != nil {
-			log.Println("Error reading JSON:", err)
+		var op Operation
+		if err := conn.ReadJSON(&op); err != nil {
+			log.Println("Error reading operation:", err)
 			break
 		}
 
-		if newText, ok := msg["text"]; ok {
-			// update the shared text.
-			textMutex.Lock()
-			sharedText = newText
-			textMutex.Unlock()
-
-			// Broadcast the update to all other clients
-			broadcastUpdate(conn, newText)
+		switch op.Type {
+		case "insert":
+			// If the client didn't supply a site and counter, assign them.
+			if op.Site == "" {
+				op.Site = localSite
+				localCounter++
+				op.Counter = localCounter
+			}
+			if len(op.Char) != 1 {
+				log.Println("Insert operation: 'char' should be a single character")
+				continue
+			}
+			newElem := crdt.Element{
+				ID:      crdt.Identifier{Site: op.Site, Counter: op.Counter},
+				Char:    []rune(op.Char)[0],
+				Deleted: false,
+			}
+			if err := doc.Insert(newElem, op.Pos); err != nil {
+				log.Println("Insert error:", err)
+				continue
+			}
+		case "delete":
+			// For a delete operation, mark the element at the given position as deleted.
+			if err := doc.Delete(op.Pos); err != nil {
+				log.Println("Delete error:", err)
+				continue
+			}
+		default:
+			log.Println("Unknown operation type:", op.Type)
+			continue
 		}
+
+		// Sort the document to ensure consistent ordering
+		doc.Merge()
+
+		broadcastUpdate(map[string]string{"text": doc.ToString()})
 	}
 
-	// Remove the client when done (e.g., on disconnect).
+	// Once the connection loop ends, remove the client from the clients map
 	clientsMutex.Lock()
 	delete(clients, conn)
 	clientsMutex.Unlock()
 }
 
 // broadcastUpdate sends the updated text to all clients except the sender.
-func broadcastUpdate(sender *websocket.Conn, text string) {
+func broadcastUpdate(message interface{}) {
 	clientsMutex.Lock()
 	defer clientsMutex.Unlock()
 
-	message := map[string]string{"text": text}
 	for client := range clients {
-		if client == sender {
-			continue
-		}
 		if err := client.WriteJSON(message); err != nil {
 			log.Println("Error broadcasting to client:", err)
 			client.Close()

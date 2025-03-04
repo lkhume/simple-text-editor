@@ -19,11 +19,32 @@ socket.onmessage = (event) => {
   }
 };
 
+let prevText = editor.value;
+
 // Send updates to the server with a delay
 editor.addEventListener("input", () => {
   clearTimeout(timeout);
   timeout = setTimeout(() => {
-    const msg = { text: editor.value };
-    socket.send(JSON.stringify(msg));
+    const currText = editor.value;
+    if (currText.length > prevText.length) {
+      // Insertion occurred
+      let pos = editor.selectionStart - (currText.length - prevText.length);
+      let insertedText = currText.slice(
+        pos,
+        pos + (currText.length - prevText.length),
+      );
+
+      if (insertedText.length === 1) {
+        const op = { type: "insert", pos: pos, char: insertedText };
+        socket.send(JSON.stringify(op));
+      }
+    } else if (currText.length < prevText.length) {
+      // Deletion occurred
+      let pos = editor.selectionStart;
+      const op = { type: "delete", pos: pos };
+      socket.send(JSON.stringify(op));
+    }
+
+    prevText = currText;
   }, 300);
 });
